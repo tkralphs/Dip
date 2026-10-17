@@ -18,6 +18,7 @@ jobs:
     name: Run tests
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
         build_static: [true, false]
@@ -66,6 +67,12 @@ jobs:
           ADD_CXXFLAGS="${ADD_CXXFLAGS}" CC=${CC} CXX=${CXX}
           [[ ${CC} ]] && CC="${CC}" || CC=""
           echo "CC=${CC}" >> $GITHUB_ENV
+      - name: Upload DIPDBG test output
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dipdbg-${{ matrix.os }}-static=${{ matrix.build_static }}
+          path: build/Dip/*/test
       - name: Archive dist contents
         run: |
           cp ${{ github.event.repository.name }}/README.md dist/

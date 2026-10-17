@@ -83,6 +83,12 @@ jobs:
           cp ${{ github.event.repository.name }}/README.md dist/
           cp ${{ github.event.repository.name }}/LICENSE dist/
         shell: msys2 {0}
+      - name: Upload DIPDBG test output
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dipdbg-${{ matrix.os }}-${{ matrix.arch }}-debug=${{ matrix.debug }}
+          path: ${{ matrix.debug && 'build-debug' || 'build' }}/Dip/*/test
       - name: Upload failed build directory
         uses: actions/upload-artifact@v6
         if: failure()

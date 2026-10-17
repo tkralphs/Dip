@@ -6401,6 +6401,17 @@ DecompStatus DecompAlgo::solveRelaxed(const double*         redCostX,
       //---  to match up with core, this might cause an issue
       //---
       if (m_param.BranchEnforceInSubProb) {
+         // DIPDBG: report inconsistent node bounds
+         for (int j = 0; j < n_origCols; j++) {
+            if (m_colLBNode[j] > m_colUBNode[j] + 1e-9) {
+               std::cout << "DIPDBG node " << m_nodeStats.nodeIndex
+                         << " block " << whichBlock << " col " << j
+                         << " nodeLB=" << m_colLBNode[j]
+                         << " nodeUB=" << m_colUBNode[j]
+                         << " phase=" << m_phase
+                         << " strongBranch=" << m_isStrongBranch << std::endl;
+            }
+         }
          subModel.setActiveColBounds(m_colLBNode, m_colUBNode);
       }
 

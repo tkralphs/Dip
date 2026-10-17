@@ -17,6 +17,21 @@
 //===========================================================================//
 #include "DecompModel.h"
 #include "DecompSolverResult.h"
+#include <cstdio>
+#include <cmath>
+#include "OsiClpSolverInterface.hpp"
+#include "CbcModel.hpp"
+// DIPDBG: temporary instrumentation for tracking down CI-only failures
+static void dipdbgWriteMps(OsiSolverInterface* si, const std::string& base)
+{
+   OsiClpSolverInterface clp;
+   clp.loadProblem(*si->getMatrixByCol(), si->getColLower(), si->getColUpper(),
+                   si->getObjCoefficients(), si->getRowLower(), si->getRowUpper());
+   for (int i = 0; i < si->getNumCols(); i++)
+      if (si->isInteger(i)) clp.setInteger(i);
+   clp.writeMps(base.c_str());
+   std::cout << "DIPDBG wrote " << base << ".mps" << std::endl;
+}
 #ifdef DIP_HAS_CBC
 #include "CbcSolver.hpp"
 #endif
@@ -299,6 +314,40 @@ void DecompSubModel::solveAsMIPSym(DecompSolverResult*  result,
    }
 
    int status = sym_get_status(env);
+   {
+      static int symCall = 0;
+      ++symCall;
+      double symObj = 0.0;
+      int symRc = sym_get_obj_val(env, &symObj);
+      OsiClpSolverInterface clp;
+      clp.loadProblem(*m_osi->getMatrixByCol(), m_osi->getColLower(),
+                      m_osi->getColUpper(), m_osi->getObjCoefficients(),
+                      m_osi->getRowLower(), m_osi->getRowUpper());
+      for (int i = 0; i < m_osi->getNumCols(); i++)
+         if (m_osi->isInteger(i)) clp.setInteger(i);
+      clp.messageHandler()->setLogLevel(0);
+      CbcModel cbcx(clp);
+      cbcx.setLogLevel(0);
+      cbcx.branchAndBound();
+      double cbcObj = cbcx.getObjValue();
+      bool symOpt = (status == PREP_OPTIMAL_SOLUTION_FOUND ||
+                     status == TM_OPTIMAL_SOLUTION_FOUND ||
+                     status == TM_TARGET_GAP_ACHIEVED);
+      bool mismatch = symOpt && cbcx.isProvenOptimal() &&
+         std::fabs(symObj - cbcObj) > 1e-6 * (1.0 + std::fabs(cbcObj));
+      std::cout << "DIPDBG sym call " << symCall << " block=" << getBlockId() << " status=" << status
+                << " objRc=" << symRc
+                << " symObj=" << UtilDblToStr(symObj, 10)
+                << " cbcOpt=" << cbcx.isProvenOptimal()
+                << " cbcObj=" << UtilDblToStr(cbcObj, 10)
+                << " rows=" << m_osi->getNumRows()
+                << " cols=" << m_osi->getNumCols()
+                << (mismatch ? " MISMATCH" : "") << std::endl;
+      if (mismatch || getenv("DIPDBG_DUMP_ALL")) {
+         dipdbgWriteMps(m_osi, "dipdbg_sym_b" + UtilIntToStr(getBlockId()) +
+                        "_" + UtilIntToStr(symCall));
+      }
+   }
 
    if (param.LogDebugLevel >= 4){
       if (status == TM_OPTIMAL_SOLUTION_FOUND) {
@@ -487,7 +536,43 @@ void DecompSubModel::solveAsMIPCbc(DecompSolverResult*  result,
    //---
    CbcParameters cbcParams;
    CbcMain0(cbc, cbcParams);
-   CbcMain1(argc, argv, cbc, cbcParams);
+   int cbcRc = CbcMain1(argc, argv, cbc, cbcParams);
+   {
+      static int cbcCall = 0;
+      ++cbcCall;
+      fflush(stdout);
+      std::cout << "DIPDBG cbc call " << cbcCall << " rc=" << cbcRc
+                << " status=" << cbc.status()
+                << " status2=" << cbc.secondaryStatus()
+                << " obj=" << cbc.getObjValue()
+                << " rows=" << m_osi->getNumRows()
+                << " cols=" << m_osi->getNumCols() << " args:";
+      for (int i = 0; i < argc; i++)
+         std::cout << " [" << argv[i] << "]";
+      std::cout << std::endl;
+      if (cbc.secondaryStatus() == -1) {
+         dipdbgWriteMps(m_osi, "dipdbg_cbc_" + UtilIntToStr(cbcCall));
+         const char* argv2[20];
+         for (int i = 0; i < argc; i++)
+            argv2[i] = argv[i];
+         argv2[2] = "3"; // -log 3
+         CbcModel cbc2(*m_osi);
+         CbcParameters cbcParams2;
+         CbcMain0(cbc2, cbcParams2);
+         std::cout << "DIPDBG rerun with -log 3" << std::endl;
+         int rc2 = CbcMain1(argc, argv2, cbc2, cbcParams2);
+         fflush(stdout);
+         std::cout << "DIPDBG rerun rc=" << rc2 << " status=" << cbc2.status()
+                   << " status2=" << cbc2.secondaryStatus()
+                   << " obj=" << cbc2.getObjValue() << std::endl;
+         CbcModel cbc3(*m_osi);
+         cbc3.setLogLevel(1);
+         cbc3.branchAndBound();
+         std::cout << "DIPDBG branchAndBound status=" << cbc3.status()
+                   << " status2=" << cbc3.secondaryStatus()
+                   << " obj=" << cbc3.getObjValue() << std::endl;
+      }
+   }
    //---
    //--- get solver status
    //---   comments based on Cbc2.3
