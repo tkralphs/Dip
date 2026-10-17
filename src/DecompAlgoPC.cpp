@@ -794,6 +794,18 @@ void DecompAlgoPC::solveMasterAsMIPSym(DecompSolverResult* result)
          osiSym->setInteger(colIndex);
       }
    }
+   // DIPDBG: report integer master columns with non-integral bounds
+   for (colIndex = 0; colIndex < nMasterCols; colIndex++) {
+      double lb = m_masterSI->getColLower()[colIndex];
+      double ub = m_masterSI->getColUpper()[colIndex];
+      bool structural = isMasterColStructural(colIndex);
+      bool masterOnly = isMasterColMasterOnly(colIndex);
+      if (ub < 1e20 &&
+          (ub != floor(ub + 0.5) || lb != floor(lb + 0.5))) {
+         fprintf(stderr, "DIPDBG masterMIP col %d structural=%d masterOnly=%d lb=%.17g ub=%.17g\n",
+                colIndex, structural, masterOnly, lb, ub);
+      }
+   }
    for (int i = 0; i < m_masterOnlyCols.size(); i++){
       if (intMarkerCore[m_masterOnlyCols[i]] == 'I'){
          osiSym->setInteger(m_masterOnlyColsMap[m_masterOnlyCols[i]]);
@@ -810,6 +822,8 @@ void DecompAlgoPC::solveMasterAsMIPSym(DecompSolverResult* result)
    }
 
    assert(env);
+   if (getenv("DIPDBG_PREP0")) // DIPDBG
+      sym_set_int_param(env, "prep_level", 0);
    osiSym->branchAndBound();
    int status = sym_get_status(env);
 

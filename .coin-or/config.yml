@@ -50,7 +50,7 @@ Dependencies:
     Required: Required
   - Description: SYMPHONY MILP Solver
     URL: https://github.com/coin-or/SYMPHONY
-    Version: fix-granularity-redetect
+    Version: tmp-dip-ci-sym-fixes
     Required: Required
   - Description: Basic Linear Algebra Subroutines (BLAS)
     URL: http://www.netlib.org/blas

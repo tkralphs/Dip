@@ -2459,6 +2459,11 @@ void DecompAlgo::setMasterBounds(const double* lbs,
                   != m_masterOnlyCols.end()) {
                m_masterSI->setColBounds(m_masterOnlyColsMap[coreColIndex],
                                         lbs[coreColIndex], ubs[coreColIndex]);
+               if (ubs[coreColIndex] != floor(ubs[coreColIndex] + 0.5) ||
+                   lbs[coreColIndex] != floor(lbs[coreColIndex] + 0.5))
+                  fprintf(stderr, "DIPDBG masterOnly bounds core col %d -> master col %d lb=%.17g ub=%.17g\n",
+                         coreColIndex, m_masterOnlyColsMap[coreColIndex],
+                         lbs[coreColIndex], ubs[coreColIndex]);
             }
          }
       } else {
